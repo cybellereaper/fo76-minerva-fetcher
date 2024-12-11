@@ -163,34 +163,66 @@ func handleError() func(*colly.Response, error) {
 }
 
 func postToDiscord(data *MinervaData) error {
-	// Create the Discord webhook message
-	discordWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL") // Replace with your actual webhook URL
-	message := fmt.Sprintf("Minerva's Current Status:\nLocation: %s\nArrival Time: %s\n\nUpcoming Sale Schedule:\n",
-		data.CurrentStatus.NextLocation, data.CurrentStatus.ArrivalTime)
+	// Get the Discord webhook URL from the environment variable
+	discordWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if discordWebhookURL == "" {
+		return fmt.Errorf("Discord webhook URL is not set in the environment variables")
+	}
 
+	// Create the rich embed message for Discord
+	embed := map[string]interface{}{
+		"title":       "Minerva's Current Status",
+		"description": fmt.Sprintf("**Location:** %s\n**Arrival Time:** %s\n", data.CurrentStatus.NextLocation, data.CurrentStatus.ArrivalTime),
+		"color":       3066993, // Blue color for the embed (you can change it)
+		"fields": []map[string]interface{}{
+			{
+				"name":   "Upcoming Sale Schedule",
+				"value":  "Below is the schedule of upcoming sales.",
+				"inline": false,
+			},
+		},
+	}
+
+	// Add sale schedule fields to the embed
 	for _, sale := range data.SaleSchedule {
-		message += fmt.Sprintf("Sale %s at %s: %s to %s\n", sale.SaleNumber, sale.Location, sale.StartDate, sale.EndDate)
+		embed["fields"] = append(embed["fields"].([]map[string]interface{}), map[string]interface{}{
+			"name":   fmt.Sprintf("Sale %s", sale.SaleNumber),
+			"value":  fmt.Sprintf("%s at %s: %s to %s", sale.SaleNumber, sale.Location, sale.StartDate, sale.EndDate),
+			"inline": false,
+		})
 	}
 
-	// Send the message to Discord
+	// Create the payload
 	payload := map[string]interface{}{
-		"content": message,
+		"embeds": []interface{}{embed},
 	}
+
+	// Marshal the payload into JSON format
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
+	// Create the POST request to send to Discord webhook
 	req, err := http.NewRequest("POST", discordWebhookURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
+	// Set the content type to JSON for the request
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
-	_, err = client.Do(req)
+
+	// Send the request
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check if the response is OK
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to send message to Discord, status code: %d", resp.StatusCode)
 	}
 
 	return nil
