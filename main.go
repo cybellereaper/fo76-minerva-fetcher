@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gocolly/colly"
 	"golang.org/x/net/proxy"
@@ -31,16 +32,45 @@ type SaleInfo struct {
 	IsNext     bool   `json:"is_next"`
 }
 
+const (
+	maxRetries = 3
+	retryDelay = 5 * time.Second
+)
+
 func main() {
-	data, err := scrapeMinervaData()
-	if err != nil {
-		log.Fatal("Failed to scrape data:", err)
+	var data *MinervaData
+	var err error
+
+	// Retry logic for scraping
+	for i := 0; i < maxRetries; i++ {
+		data, err = scrapeMinervaData()
+		if err == nil && data != nil && len(data.SaleSchedule) > 0 {
+			break
+		}
+
+		log.Printf("Attempt %d failed: %v. Retrying in %v...", i+1, err, retryDelay)
+		time.Sleep(retryDelay)
 	}
 
-	// Send the data to Discord
-	err = postToDiscord(data)
+	if err != nil || data == nil || len(data.SaleSchedule) == 0 {
+		log.Printf("All retry attempts failed. Setting GitHub Action failure status")
+		os.Exit(1) // This will cause the GitHub Action to fail and retry
+	}
+
+	// Retry logic for Discord posting
+	for i := 0; i < maxRetries; i++ {
+		err = postToDiscord(data)
+		if err == nil {
+			break
+		}
+
+		log.Printf("Discord post attempt %d failed: %v. Retrying in %v...", i+1, err, retryDelay)
+		time.Sleep(retryDelay)
+	}
+
 	if err != nil {
-		log.Fatal("Failed to post data to Discord:", err)
+		log.Printf("Failed to post to Discord after %d attempts: %v", maxRetries, err)
+		os.Exit(1)
 	}
 
 	printJSON(data)
@@ -52,10 +82,19 @@ func scrapeMinervaData() (*MinervaData, error) {
 	}
 
 	c := setupCollector()
+
+	// Add timeout to prevent hanging
+	c.SetRequestTimeout(30 * time.Second)
+
 	setupHandlers(c, minervaData)
 
 	if err := c.Visit("https://www.falloutbuilds.com/fo76/minerva/"); err != nil {
 		return nil, fmt.Errorf("failed to visit URL: %w", err)
+	}
+
+	// Validate scraped data
+	if minervaData.CurrentStatus.NextLocation == "" || len(minervaData.SaleSchedule) == 0 {
+		return nil, fmt.Errorf("failed to scrape required data")
 	}
 
 	return minervaData, nil
