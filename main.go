@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gocolly/colly"
@@ -124,7 +125,7 @@ func handleError() func(*colly.Response, error) {
 
 func postToDiscord(data *MinervaData) error {
 	// Create the Discord webhook message
-	discordWebhookURL := "YOUR_DISCORD_WEBHOOK_URL" // Replace with your actual webhook URL
+	discordWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL") // Replace with your actual webhook URL
 	message := fmt.Sprintf("Minerva's Current Status:\nLocation: %s\nArrival Time: %s\n\nUpcoming Sale Schedule:\n",
 		data.CurrentStatus.NextLocation, data.CurrentStatus.ArrivalTime)
 
