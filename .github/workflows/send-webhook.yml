@@ -10,6 +10,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Install Tor and jq
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tor jq
+        sudo service tor start
+
+    - name: Verify Tor is running
+      run: |
+        # Verify Tor is running on the correct port (9050 for SOCKS5)
+        ps aux | grep tor
+        netstat -an | grep 9050
+
+    - name: Wait for Tor to be ready
+      run: |
+        # Wait for Tor to be fully initialized and listening on port 9050
+        while ! nc -z 127.0.0.1 9050; do
+          echo "Waiting for Tor to be ready..."
+          sleep 1
+        done
+        echo "Tor is ready!"
     - name: Checkout the repository
       uses: actions/checkout@v2
 
