@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
-	"ioutil"
+	"io/ioutil"
 	"github.com/gocolly/colly"
 	"golang.org/x/net/proxy"
 )
